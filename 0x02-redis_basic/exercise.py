@@ -2,7 +2,16 @@
 """Writing strings to Redis."""
 import uuid
 import redis
+from functools import wraps
 
+
+def count_calls(method: Callable) -> Callable:
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        key = self.__class__.__name__ + "." + method.__qualname__
+        self._redis.incr(key)
+        return method(self, *args, **kwargs)
+    return wrapper
 
 class Cache:
     """Is the object storing data in redis data storage."""
