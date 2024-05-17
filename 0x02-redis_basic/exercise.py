@@ -15,6 +15,7 @@ def count_calls(method: Callable) -> Callable:
 
 @count_calls
 def call_history(method: Callable) -> Callable:
+    """store the history of inputs and outputs for a particular function"""
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         key_in = self.__class__.__name__ + "." + method.__qualname__ + ":inputs"
@@ -24,6 +25,16 @@ def call_history(method: Callable) -> Callable:
         self._redis.rpush(key_out, str(output))
         return output
     return wrapper
+
+def replay(method: Callable) -> None:
+    """Display the history of calls of a particular function."""
+    key_in = method.__qualname__ + ":inputs"
+    key_out = method.__qualname__ + ":outputs"
+    inputs = cache._redis.lrange(key_in, 0, -1)
+    outputs = cache._redis.lrange(key_out, 0, -1)
+    print(f"{method.__qualname__} was called {len(inputs)} times:")
+    for input, output in zip(inputs, outputs):
+        print(f"{method.__qualname__}(*{input}) -> {output}")
 
 class Cache:
     """Is the object storing data in redis data storage."""
