@@ -7,43 +7,57 @@ from typing import Any, Callable, Union
 
 
 def count_calls(method: Callable) -> Callable:
+    """tracks number of calls made."""
     @wraps(method)
-    def wrapper(self, *args, **kwargs):
-        key = self.__class__.__name__ + "." + method.__qualname__
-        self._redis.incr(key)
+    def invoker(self, *args, **kwargs) -> Any:
+        if isinstance(self._redis, redis.Redis):
+            self._redis.incr(method.__qualname__)
         return method(self, *args, **kwargs)
-    return wrapper
-
-Cache.store = count_calls(Cache.store)
+    return invoker
 
 @count_calls
 def call_history(method: Callable) -> Callable:
     """store the history of inputs and outputs for a particular function"""
     @wraps(method)
-    def wrapper(self, *args, **kwargs):
-        key_in = self.__class__.__name__ + "." + method.__qualname__ + ":inputs"
-        key_out = self.__class__.__name__ + "." + method.__qualname__ + ":outputs"
-        self._redis.rpush(key_in, str(args))
+    def invoker(self, *args, **kwargs) -> Any:
+        in_key = '{}:inputs'.format(method.__qualname__)
+        out_key = '{}:outputs'.format(method.__qualname__)
+        if isinstance(self._redis, redis.Redis):
+            self._redis.rpush(in_key, str(args))
         output = method(self, *args, **kwargs)
-        self._redis.rpush(key_out, str(output))
+        if isinstance(self._redis, redis.Redis):
+            self._redis.rpush(out_key, output)
         return output
-    return wrapper
+    return invoker
 
-Cache.store = call_history(Cache.store)
-
-def replay(method: Callable) -> None:
+def replay(fn: Callable) -> None:
     """Display the history of calls of a particular function."""
-    key_in = method.__qualname__ + ":inputs"
-    key_out = method.__qualname__ + ":outputs"
-    inputs = cache._redis.lrange(key_in, 0, -1)
-    outputs = cache._redis.lrange(key_out, 0, -1)
-    print(f"{method.__qualname__} was called {len(inputs)} times:")
-    for input, output in zip(inputs, outputs):
-        print(f"{method.__qualname__}(*{input}) -> {output}")
+    if fn is None or not hasattr(fn, '__self__'):
+        return
+    redis_store = getattr(fn.__self__, '_redis', None)
+    if not isinstance(redis_store, redis.Redis):
+        return
+    fxn_name = fn.__qualname__
+    in_key = '{}:inputs'.format(fxn_name)
+    out_key = '{}:outputs'.format(fxn_name)
+    fxn_call_count = 0
+    if redis_store.exists(fxn_name) != 0:
+        fxn_call_count = int(redis_store.get(fxn_name))
+    print('{} was called {} times:'.format(fxn_name, fxn_call_count))
+    fxn_inputs = redis_store.lrange(in_key, 0, -1)
+    fxn_outputs = redis_store.lrange(out_key, 0, -1)
+    for fxn_input, fxn_output in zip(fxn_inputs, fxn_outputs):
+        print('{}(*{}) -> {}'.format(
+            fxn_name,
+            fxn_input.decode("utf-8"),
+            fxn_output,
+        ))
+
 
 class Cache:
     """Is the object storing data in redis data storage."""
     def __init__(self) -> None:
+        """intanalizes a cache instance."""
         self._redis = redis.Redis()
         self._redis.flushdb()
 
