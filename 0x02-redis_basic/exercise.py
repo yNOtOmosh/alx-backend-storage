@@ -13,14 +13,24 @@ def count_calls(method: Callable) -> Callable:
         return method(self, *args, **kwargs)
     return wrapper
 
+@count_calls
+def call_history(method: Callable) -> Callable:
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        key_in = self.__class__.__name__ + "." + method.__qualname__ + ":inputs"
+        key_out = self.__class__.__name__ + "." + method.__qualname__ + ":outputs"
+        self._redis.rpush(key_in, str(args))
+        output = method(self, *args, **kwargs)
+        self._redis.rpush(key_out, str(output))
+        return output
+    return wrapper
+
 class Cache:
     """Is the object storing data in redis data storage."""
     def __init__(self) -> None:
         self._redis = redis.Redis()
         self._redis.flushdb()
 
-    @call_history
-    @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """stores value in redis data storage and return key"""
         key = str(uuid.uuid4())
