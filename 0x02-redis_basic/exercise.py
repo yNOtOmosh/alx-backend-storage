@@ -16,7 +16,6 @@ def count_calls(method: Callable) -> Callable:
     return invoker
 
 
-@count_calls
 def call_history(method: Callable) -> Callable:
     """store the history of inputs and outputs for a particular function"""
     @wraps(method)
@@ -63,6 +62,8 @@ class Cache:
         self._redis = redis.Redis()
         self._redis.flushdb()
 
+    @call_history
+    @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """stores value in redis data storage and return key"""
         data_key = str(uuid.uuid4())
