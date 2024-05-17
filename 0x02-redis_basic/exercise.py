@@ -13,6 +13,8 @@ def count_calls(method: Callable) -> Callable:
         return method(self, *args, **kwargs)
     return wrapper
 
+Cache.store = count_calls(Cache.store)
+
 @count_calls
 def call_history(method: Callable) -> Callable:
     """store the history of inputs and outputs for a particular function"""
@@ -25,6 +27,8 @@ def call_history(method: Callable) -> Callable:
         self._redis.rpush(key_out, str(output))
         return output
     return wrapper
+
+Cache.store = call_history(Cache.store)
 
 def replay(method: Callable) -> None:
     """Display the history of calls of a particular function."""
